@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Allure Report Viewer</title>
+    <style>
+        :root {
+            --primary: #007acc;
+            --success: #28a745;
+            --bg: #1e1e1e;
+            --panel: #252526;
+            --text: #cccccc;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        header {
+            padding: 15px 20px;
+            background: var(--panel);
+            border-bottom: 1px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        h2 {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            transition: opacity 0.5s;
+        }
+
+        #drop-zone {
+            width: 600px;
+            padding: 40px;
+            border: 3px dashed #444;
+            border-radius: 12px;
+            text-align: center;
+            background: #2d2d2d;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        #drop-zone.dragover {
+            border-color: var(--primary);
+            background: #383838;
+            transform: scale(1.02);
+        }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        .btn:hover {
+            background: #005f9e;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn:disabled {
+            background: #444;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .btn-reset {
+            font-size: 0.8rem;
+            background: #444;
+            padding: 8px 15px;
+        }
+
+        .btn-reset:hover {
+            background: #555;
+        }
+
+        #file-status-area {
+            width: 600px;
+            margin-top: 30px;
+            display: none;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .status-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .progress-container {
+            width: 100%;
+            background: #333;
+            height: 12px;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 15px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), #00a8ff);
+            width: 0%;
+            transition: width 0.3s ease-out;
+            border-radius: 6px;
+        }
+
+        .progress-bar.finished {
+            background: var(--success);
+        }
+
+        .info-box {
+            background: #2a2a2a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .info-icon {
+            font-size: 2rem;
+        }
+
+        .info-content h4 {
+            margin: 0 0 5px 0;
+        }
+
+        .info-content p {
+            margin: 0;
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        .success-text {
+            color: var(--success);
+        }
+
+        .error-text {
+            color: #ff4444;
+        }
+
+        #viewer-frame {
+            display: none;
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: white;
+            flex: 1;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h2>
+            <img src="https://allurereport.org/svg/logo-report-sign.svg" alt="allure-logo" width="28" height="28">
+            Allure Report Viewer
+        </h2>
+        <button class="btn btn-reset" onclick="location.reload()">Reset / New Upload</button>
+    </header>
+
+    <div id="main-container">
+        <div id="drop-zone">
+            <svg style="width:80px;height:80px;margin:0 auto;fill:#555;" viewBox="0 0 24 24">
+                <path
+                    d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z" />
+            </svg>
+            <h3>Drag & Drop FOLDER allure-report Here</h3>
+            <p style="color:#888; margin-top: -10px;">
+                It can be the parent folder or its contents. The system will adjust automatically.
+            </p>
+
+            <input type="file" id="folder-input" webkitdirectory directory multiple style="display: none;">
+            <button class="btn" onclick="document.getElementById('folder-input').click()" style="margin-top: 10px;">Or
+                Select Folder...</button>
+        </div>
+
+        <div id="file-status-area">
+            <div class="status-header">
+                <span id="status-text">Scanning files...</span>
+                <span id="count-text">0 files</span>
+            </div>
+
+            <div class="progress-container">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+
+            <div id="scan-result-info" class="info-box hidden">
+            </div>
+
+            <div style="text-align: center; margin-top: 25px;">
+                <button id="btn-process" class="btn" disabled
+                    style="width: 100%; padding: 15px; font-size: 1.1rem;">Process Report Now</button>
+            </div>
+        </div>
+    </div>
+
+    <iframe id="viewer-frame"></iframe>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileStatusArea = document.getElementById('file-status-area');
+        const progressBar = document.getElementById('progress-bar');
+        const statusText = document.getElementById('status-text');
+        const countText = document.getElementById('count-text');
+        const btnProcess = document.getElementById('btn-process');
+        const folderInput = document.getElementById('folder-input');
+        const scanResultInfo = document.getElementById('scan-result-info');
+
+        let rawFileCache = new Map(); 
+        let normalizedFileCache = new Map();
+        let isScanning = false;
+        let lastUpdateTime = 0;
+
+        // --- DRAG & DROP HANDLERS ---
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => {
+            dropZone.addEventListener(e, (ev) => { ev.preventDefault(); ev.stopPropagation(); });
+        });
+        dropZone.addEventListener('dragover', () => dropZone.classList.add('dragover'));
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+
+        dropZone.addEventListener('drop', async (e) => {
+            dropZone.classList.remove('dragover');
+            const items = e.dataTransfer.items;
+            if (items && items.length > 0) {
+                startScanning();
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i].webkitGetAsEntry();
+                    if (item) await traverseFileTree(item);
+                }
+                finishScanning();
+            }
+        });
+
+        folderInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                startScanning();
+                Array.from(e.target.files).forEach((file, index) => {
+                    rawFileCache.set(file.webkitRelativePath, file);
+                    updateProgressUI(index + 1);
+                });
+                finishScanning();
+            }
+        });
+
+        // --- SCANNING LOGIC ---
+        function startScanning() {
+            rawFileCache.clear();
+            normalizedFileCache.clear();
+            dropZone.style.display = 'none';
+            fileStatusArea.style.display = 'block';
+            btnProcess.disabled = true;
+            isScanning = true;
+            statusText.innerText = "Scanning folder structure...";
+            progressBar.style.width = '20%';
+            scanResultInfo.classList.add('hidden');
+            progressBar.classList.remove('finished');
+        }
+
+        async function traverseFileTree(item, path = "") {
+            if (item.isFile) {
+                const file = await new Promise(resolve => item.file(resolve));
+                let fullPath = path + file.name;
+                rawFileCache.set(fullPath, file);
+
+                updateProgressUI(rawFileCache.size);
+
+            } else if (item.isDirectory) {
+                const dirReader = item.createReader();
+                const entries = await new Promise(resolve => dirReader.readEntries(resolve));
+                for (const entry of entries) {
+                    await traverseFileTree(entry, path + item.name + "/");
+                }
+            }
+        }
+
+        function updateProgressUI(count) {
+            const now = Date.now();
+            if (now - lastUpdateTime > 150 || count === 1) {
+                countText.innerText = `${count.toLocaleString()} files found`;
+                let currentWidth = parseFloat(progressBar.style.width) || 20;
+                if (currentWidth < 85) {
+                    progressBar.style.width = (currentWidth + 0.5) + '%';
+                }
+                lastUpdateTime = now;
+            }
+        }
+
+        function normalizeFilePaths() {
+            normalizedFileCache.clear();
+            let indexPath = null;
+
+            for (let path of rawFileCache.keys()) {
+                if (path.endsWith("index.html") && !path.includes("/index.html/")) {
+                    indexPath = path;
+                    break;
+                }
+            }
+
+            if (!indexPath) return false; 
+            let pathPrefix = indexPath.substring(0, indexPath.lastIndexOf("index.html"));
+
+            console.log(`[Auto-Reroute] Detected prefix to strip: "${pathPrefix}"`);
+
+            for (const [fullPath, file] of rawFileCache.entries()) {
+                if (fullPath.startsWith(pathPrefix)) {
+                    const cleanPath = fullPath.substring(pathPrefix.length);
+                    normalizedFileCache.set(cleanPath, file);
+                }
+            }
+            return true;
+        }
+
+
+        function finishScanning() {
+            progressBar.style.width = '100%';
+
+            statusText.innerText = "Finalizing & Normalizing paths...";
+
+            const isSuccess = normalizeFilePaths();
+
+            setTimeout(() => {
+                scanResultInfo.classList.remove('hidden');
+                if (isSuccess) {
+                    progressBar.classList.add('finished');
+                    statusText.innerText = "Ready!";
+                    countText.innerText = `${normalizedFileCache.size.toLocaleString()} files ready`;
+
+                    scanResultInfo.innerHTML = `
+                        <div class="info-icon success-text">✓</div>
+                        <div class="info-content">
+                            <h4 class="success-text">Structure Recognized!</h4>
+                            <p>The Allure folder has been found. The file path has been automatically adjusted.</p>
+                        </div>
+                    `;
+                    btnProcess.disabled = false;
+                } else {
+                    progressBar.style.backgroundColor = '#ff4444';
+                    statusText.innerText = "Error!";
+                    statusText.classList.add('error-text');
+
+                    scanResultInfo.innerHTML = `
+                        <div class="info-icon error-text">✕</div>
+                        <div class="info-content">
+                            <h4 class="error-text">Invalid Folder</h4>
+                            <p>File <code>index.html</code> Not found. Make sure you drop the complete Allure Report folder.</p>
+                        </div>
+                    `;
+                }
+            }, 800);
+        }
+
+        // --- PROCESS BUTTON LOGIC ---
+        btnProcess.addEventListener('click', async () => {
+            if (!('serviceWorker' in navigator)) {
+                alert("Browser ini tidak mendukung Service Worker.");
+                return;
+            }
+
+            btnProcess.innerHTML = "Processing & Loading Viewer... <span style='font-size:0.8em'>(Please Wait)</span>";
+            btnProcess.disabled = true;
+
+            try {
+                const registration = await navigator.serviceWorker.register('sw.js');
+                await navigator.serviceWorker.ready;
+
+                if (!navigator.serviceWorker.controller) {
+                    window.location.reload();
+                    return;
+                }
+
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'FILE_LIST',
+                    files: normalizedFileCache
+                });
+
+                setTimeout(() => {
+                    document.getElementById('main-container').style.opacity = '0';
+                    setTimeout(() => {
+                        document.getElementById('main-container').style.display = 'none';
+                        document.getElementById('viewer-frame').style.display = 'block';
+                        document.getElementById('viewer-frame').src = '__view__/index.html';
+                    }, 500);
+                }, 1500);
+
+            } catch (e) {
+                console.error(e);
+                alert("Gagal menginisialisasi Service Worker. Lihat console.");
+                btnProcess.innerText = "Error Occured";
+            }
+        });
+
+    </script>
+</body>
+
+</html>
