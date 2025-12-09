@@ -212,7 +212,7 @@
             <img src="https://allurereport.org/svg/logo-report-sign.svg" alt="allure-logo" width="28" height="28">
             Allure Report Viewer
         </h2>
-        <button class="btn btn-reset" onclick="location.reload()">Reset / New Upload</button>
+        <button class="btn btn-reset" onclick="resetViewer()">Reset / New Upload</button>
     </header>
 
     <div id="main-container">
@@ -268,7 +268,23 @@
         let isScanning = false;
         let lastUpdateTime = 0;
 
-        // --- DRAG & DROP HANDLERS ---
+        async function resetViewer() {
+            if (navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_PERSISTENCE' });
+                console.log('[Client] Sent CLEAR_PERSISTENCE message to SW.');
+            }
+            try {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (const reg of registrations) {
+                    await reg.unregister();
+                }
+                console.log('[Client] Unregistered all Service Workers.');
+            } catch (e) {
+                console.warn('[Client] Failed to unregister SWs:', e);
+            }
+            setTimeout(() => location.reload(), 500);
+        }
+
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => {
             dropZone.addEventListener(e, (ev) => { ev.preventDefault(); ev.stopPropagation(); });
         });
@@ -299,7 +315,6 @@
             }
         });
 
-        // --- SCANNING LOGIC ---
         function startScanning() {
             rawFileCache.clear();
             normalizedFileCache.clear();
@@ -406,7 +421,6 @@
             }, 800);
         }
 
-        // --- PROCESS BUTTON LOGIC ---
         btnProcess.addEventListener('click', async () => {
             if (!('serviceWorker' in navigator)) {
                 alert("Browser ini tidak mendukung Service Worker.");
@@ -420,15 +434,42 @@
                 const registration = await navigator.serviceWorker.register('sw.js');
                 await navigator.serviceWorker.ready;
 
-                if (!navigator.serviceWorker.controller) {
-                    window.location.reload();
-                    return;
+                const filesObj = Object.create(null);
+                for (const [p, f] of normalizedFileCache.entries()) {
+                    filesObj[p] = f;
                 }
 
-                navigator.serviceWorker.controller.postMessage({
-                    type: 'FILE_LIST',
-                    files: normalizedFileCache
-                });
+                const postToWorker = (workerScope) => {
+                    try {
+                        workerScope.postMessage({ type: 'FILE_LIST', files: filesObj });
+                    } catch (err) {
+                        console.warn('Failed to postMessage to worker scope', err);
+                    }
+                };
+
+                if (registration.active) {
+                    postToWorker(registration.active);
+                } else if (navigator.serviceWorker.controller) {
+                    postToWorker(navigator.serviceWorker.controller);
+                } else {
+                    await new Promise((resolve) => {
+                        let resolved = false;
+                        const onControllerChange = () => {
+                            navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+                            if (navigator.serviceWorker.controller) {
+                                postToWorker(navigator.serviceWorker.controller);
+                            }
+                            resolved = true;
+                            resolve();
+                        };
+                        navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+                        setTimeout(() => {
+                            if (resolved) return resolve();
+                            if (registration.active) postToWorker(registration.active);
+                            resolve();
+                        }, 1500);
+                    });
+                }
 
                 setTimeout(() => {
                     document.getElementById('main-container').style.opacity = '0';
@@ -437,7 +478,7 @@
                         document.getElementById('viewer-frame').style.display = 'block';
                         document.getElementById('viewer-frame').src = '__view__/index.html';
                     }, 500);
-                }, 1500);
+                }, 900);
 
             } catch (e) {
                 console.error(e);
